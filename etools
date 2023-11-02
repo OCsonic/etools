@@ -1,0 +1,195 @@
+#!/bin/bash
+##############################################
+##     ##      ###    ####    ###  #####    ##
+##  #######  ####  ##  ##  ##  ##  ####  #####
+##     ####  ####  ##  ##  ##  ##  #####   ###
+##  #######  ####  ##  ##  ##  ##  #######  ##
+##     ####  #####    ####    ###    ##    ###
+##############################################
+##############################################
+#                                            #
+#        Made with <3 by Basil! >^-^<        #
+#                                            #
+##############################################
+
+APPLET=$(basename $0)
+if [[ $APPLET == "etools" ]]; then
+	case $1 in
+		-i | --install)
+			if [[ ! $2 ]]; then >&2 echo Please specify a location to install symlinks to! && exit 1
+			elif [[ ! -d $2 ]]; then >&2 echo Selected install location \"$2\" does not exist! && exit 1; fi
+
+			INSTALLPATH=$2
+			dolink () {
+				ln -s $0 $INSTALLPATH/$1
+			}
+			dolink erepo
+			dolink eshowuse
+			dolink eshowdepon
+			dolink elistpkgs
+			dolink etsls
+			dolink eunfoldmarch
+		;;
+		-h | --help | *)
+			echo -e "usage:\n  $APPLET: Symlink this script to \"erepo\", \"eshowuse\", or any of the other applets inside of it to utilize them.\n  $(n=1; while [[ $n -lt $(basename $0 | wc -c) ]]; do printf " "; n=$((n+1)); done)  or run \"$APPLET -i <path/to/link/to>\" to automatically symlink every applet to a specified directory.\n"
+		;;
+	esac
+elif [[ $APPLET == "erepo" ]]; then
+	case $1 in
+		-h | --help)
+			echo -e "usage:\n  $APPLET --help/--list\n  $(n=1; while [[ $n -lt $(basename $0 | wc -c) ]]; do printf " "; n=$((n+1)); done) --add <repo-name> <protocol> <repo-url>\n  $(n=1; while [[ $n -lt $(basename $0 | wc -c) ]]; do printf " "; n=$((n+1)); done) [--enable/--disable/--remove] <repo-name>\n"
+		;;
+		-l | --list)
+			echo "$APPLET: Listing enabled repositories..."
+			eselect repository list -i
+			echo ""
+		;;
+		* )
+			checkUser() {
+				if [[ $UID != "0" ]]; then
+					>&2 echo This tool only works as root!
+					exit 13
+				fi
+			}
+			case $1 in
+				-a | --add)
+					checkUser
+					echo "$APPLET: Adding repository $2 ($3 $4)..."
+					eselect repository add $2 $3 $4
+					emaint sync -r $2
+				;;
+				-e | --enable)
+					checkUser
+					echo "$APPLET: Enabling repository $2..."
+					eselect repository enable $2
+					emaint sync -r $2
+				;;
+				-d | --disable)
+					checkUser
+					echo "$APPLET: Disabling repository $2..."
+					eselect repository disable -f $2
+				;;
+				-r | --remove)
+					checkUser
+					echo "$APPLET: Removing repository $2..."
+					eselect repository remove -f $2
+				;;
+				* )
+					>&2 echo "$APPLET: Unknown mode, Try \"$APPLET --help\""
+					exit 1
+				;;
+			esac
+		;;
+	esac
+elif [[ $APPLET == "eshowuse" ]]; then
+	if [[ ! "$1" ]]; then >&2 echo -e "usage:\n  $APPLET <use-flag>\n" && exit 1; fi
+	for pkg in $(equery -q hasuse "$1"); do echo $pkg: $(equery -q uses $pkg | grep "$1"); done
+elif [[ $APPLET == "edepon" ]]; then
+	if test -z "$(ls "/var/db/repos/"*"/$@" 2> /dev/null)"; then >&2 echo "$APPLET: package \"$@\" does not exist." && exit 1; fi
+	while read -r line; do
+		if test -n "$(echo $line | grep -o "\-r[0-9]")"; then line="$(echo $line|rev|cut -d'-' -f2-|rev)"; fi
+		line="$(echo $line|rev|cut -d'-' -f2-|rev)"
+		output="$output $line"
+	done < <(equery depends "$@"|cut -d'=' -f2)
+	echo $output
+elif [[ $APPLET == "elistpkgs" ]]; then
+	case $3 in
+		"")	
+			if [[ ! $2 ]]; then
+				if [[ ! $1 ]]; then		
+					while read -r line; do
+						output="$output $line"
+					done < <(qlist -I)
+				else
+					output_tmp="$1"
+					while read -r line; do
+						if [[ "${line::1}" == "@" ]]; then
+							if [[ ! "$(emerge --ask --update --pretend --nodeps $line 2>&1 | grep -o "'${line#@*}'")" == "" ]]; then >&2 echo "$APPLET: set \"$line\" does not exist." && exit 1; fi
+						else
+							if test -z "$(ls "/var/db/repos/"*"/$line" 2> /dev/null)"; then >&2 echo "$APPLET: package \"$line\" does not exist." && exit 1; fi
+						fi
+					done < <(echo "$output_tmp" | sed 's/ /\n/g')
+					while read -r line; do
+						if test -n "$(echo $line | grep -o "\-r[0-9]")"; then line="$(echo $line|rev|cut -d'-' -f2-|rev)"; fi
+						line="$(echo $line|rev|cut -d'-' -f2-|rev)"
+						output="$output $line"
+					done < <(emerge --ask --pretend $output_tmp 2> /dev/null | grep "ebuild" | grep -o "] .*" | cut -d' ' -f2)
+				fi
+			else
+				if [[ ! "$2" =~ ^([0-9])$ ]]; then >&2 echo "$APPLET: \"$2\" is not a number of packages to skip" && exit 1; fi
+				output="$($0 $1 | cut -d' ' -f $2-)"
+			fi
+		;;
+		-x | --exclude)
+			while read -r line; do
+				while read -r package; do
+					if [[ "$line" == "$package" ]]; then line=""; fi
+				done < <(echo ${@:4} | sed 's/ /\n/g')
+				output="$output $line"
+			done < <($0 $1 $2 | sed 's/ /\n/g')
+		;;
+		-h | --help | *)
+			echo -e "usage:\n  $APPLET: <package/set> <skip_to_package_#> --exlude \"<package> <list> <goes> <here>\""
+		;;
+	esac
+	echo $output
+elif [[ $APPLET == "etsls" ]]; then
+	LastSyncTime="$(date -u --date="$(cat /var/db/repos/gentoo/metadata/timestamp.chk)" +"%s %d %m %Y")"
+	CurrentTime=$(date -u +%s)
+	TimeSLS="$(timebetween "$(echo $LastSyncTime | cut -f1 -d" ")" "$CurrentTime" $(echo $LastSyncTime | cut -f2- -d" "))"
+	subst() {
+		sed "s/%$1/$(echo "${@:2}")/"
+	}
+	output() {
+		echo "$@" | \
+			subst yy $(echo $TimeSLS | cut -f1 -d" ") | \
+			subst mm $(echo $TimeSLS | cut -f4 -d" ") | \
+			subst ww $(echo $TimeSLS | cut -f7 -d" ") | \
+			subst dd $(echo $TimeSLS | cut -f10 -d" ") | \
+			subst HH $(echo $TimeSLS | cut -f14 -d" " | cut -f1 -d":") | \
+			subst MM $(echo $TimeSLS | cut -f14 -d" " | cut -f2 -d":") | \
+			subst SS $(echo $TimeSLS | cut -f14 -d" " | cut -f3 -d":") | \
+			subst y $(echo $TimeSLS | cut -f2 -d" ") | \
+			subst m $(echo $TimeSLS | cut -f5 -d" ") | \
+			subst w $(echo $TimeSLS | cut -f8 -d" ") | \
+			subst d $(echo $TimeSLS | cut -f11 -d" ") | \
+			subst H $(echo $TimeSLS | cut -f13 -d" " | cut -f1 -d":") | \
+			subst M $(echo $TimeSLS | cut -f13 -d" " | cut -f2 -d":") | \
+			subst S $(echo $TimeSLS | cut -f13 -d" " | cut -f3 -d":")
+	}
+	case $1 in
+		-h | --help)
+			if [[ "$2" =~ ^(-s|--secret)$ ]]; then exampleOutput="$(output "%dd Day(s), %H:%M:%S")"; else exampleOutput="82 Day(s), 05:43:17"; fi
+			echo -e "$APPLET:\n  Displays the time since the last portage sync with customizable output.\n    First argument is passed as custom output, output can contain bash expressions\n    Default Output : \"%yy Year(s), %m Month(s), %w Week(s), %d Day(s), %H:%M:%S\"\n  Formatting:\n    Years = %y, Months = %m, Weeks = %w, Days = %d\n    Hours = %H, Minutes = %M, Seconds = %S\n  Whichever unit you want all the overflow to be displayed in\n  can be selected by repeating the formatting symbol twice\n  ex: \"%dd Day(s), %H:%M:%S\" -> \"$exampleOutput\""
+		;;
+		"" )
+			output "%yy Year(s), %m Month(s), %w Week(s), %d Day(s), %H:%M:%S"
+		;;
+		* )	
+			output "$@"
+		;;
+	esac
+elif [[ $APPLET == "eunfoldmarch" ]]; then
+	if [[ "$CC" == "gcc" ]]; then
+		output_tmp="$($CC -march=$1 -Q --help=target -v 2> /dev/null | tail -n +2 | sed -n '/  -/,/^$/p' | head -n -1)"
+	else
+		>&2 echo "Please set the value of "'$CC'" to a supported C compiler!"
+		exit 1
+	fi
+	if [[ ! "$1" ]]; then >&2 echo "Please select a valid '-march=' to see what configuration it outputs!" && exit 1; fi
+	while read -r line; do
+		if [[ "$(echo $line | awk '{print $2}')" =~ ^(""|"[default]")$ ]]; then
+			line=""
+		elif [[ "$(echo $line | awk '{print $2}')" == "[enabled]" ]]; then
+			line="$(echo $line | awk '{print $1}')"
+		elif [[ "$(echo $line | awk '{print $2}')" == "[disabled]" ]]; then
+			line="$(echo "-mno-$(echo $line | awk '{print $1}' | sed 's/-m//g')")"
+		elif [[ "$(echo $line | awk '{print $2}')" =~ ^-.* ]]; then
+			line="$line"
+		else
+			line="$(echo $line | sed 's/ //g')"
+		fi
+		output="$output $line"
+	done < <(echo "$output_tmp")
+	echo $output
+fi
