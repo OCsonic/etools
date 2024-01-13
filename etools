@@ -28,8 +28,7 @@ if [[ $APPLET == "etools" ]]; then
 			dolink elistpkgs
 			dolink etsls
 			dolink eunfoldmarch
-			dolink bulkenv
-			dolink erebuild
+			dolink ebulkcond
 		;;
 		-h | --help | *)
 			echo -e "usage:\n  $APPLET: Symlink this script to \"erepo\", \"eshowuse\", or any of the other applets inside of it to utilize them.\n  $(n=1; while [[ $n -lt $(basename $0 | wc -c) ]]; do printf " "; n=$((n+1)); done)  or run \"$APPLET -i <path/to/link/to>\" to automatically symlink every applet to a specified directory.\n"
