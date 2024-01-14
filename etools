@@ -193,9 +193,12 @@ elif [[ $APPLET == "ebulkcond" ]]; then
 	esac
 	package="$1" && packagename="$package"
 	if test -n "$(echo $packagename| grep -o "\-r[0-9]")"; then packagename="$(echo $packagename|rev|cut -d'-' -f2-|rev)"; fi
-	packagename="$(echo $packagename|rev|cut -d'-' -f2-|rev)"
-	if test -z "$(ls "/var/db/repos/"*"/$packagename/${package##*/}.ebuild" 2> /dev/null)"; then >&2 echo "$APPLET: package \"$package\" does not exist." && exit 1; fi
 	if [ ! "$package" ]; then echo "Please provide a package atom!" && exit 1; fi
+	if [[ "${package%/*}" == "virtual" ]]; then valid=1; else valid=2; fi
+	if [[ "$(echo $package | grep -o '-' | wc -l)" < $valid ]]; then echo "$APPLET: specify a version of the package" && exit 1; fi
+	packagename="$(echo $packagename|rev|cut -d'-' -f2-|rev)"
+	if test -z "$(ls "/var/db/repos/"*"/$packagename/" 2> /dev/null)"; then >&2 echo "$APPLET: package \"$packagename\" does not exist." && exit 1; fi
+	if test -z "$(ls "/var/db/repos/"*"/$packagename/${package##*/}.ebuild" 2> /dev/null)"; then >&2 echo "$APPLET: version \"$package\" does not exist." && exit 1; fi
 	case "$2" in
 		depends|d|depgraph|g)
 			condition="$2"
